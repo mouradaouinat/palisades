@@ -1,0 +1,80 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer glow -->
+  <g filter="url(#glow)">
+    <rect x="32" y="32" width="192" height="192" rx="48" fill="url(#gradient1)" opacity="0.2"/>
+  </g>
+  
+  <!-- Main glass container -->
+  <rect x="32" y="32" width="192" height="192" rx="48" fill="url(#glass-bg)" stroke="url(#border-gradient)" stroke-width="2"/>
+  
+  <!-- Liquid background effect -->
+  <rect x="34" y="34" width="188" height="188" rx="47" fill="url(#liquid-gradient)" opacity="0.3">
+    <animate attributeName="opacity" values="0.2;0.4;0.2" dur="3s" repeatCount="indefinite"/>
+  </rect>
+  
+  <!-- Floating orbs -->
+  <circle cx="70" cy="70" r="6" fill="#60A5FA" opacity="0.6">
+    <animate attributeName="cy" values="70;75;70" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="186" cy="186" r="5" fill="#C084FC" opacity="0.6">
+    <animate attributeName="cy" values="186;191;186" dur="2s" begin="0.5s" repeatCount="indefinite"/>
+  </circle>
+  
+  <!-- The "P" letter -->
+  <text x="128" y="168" font-family="Arial, sans-serif" font-size="120" font-weight="bold" text-anchor="middle" fill="url(#text-gradient)">P</text>
+  
+  <!-- Inner highlight for glass effect -->
+  <rect x="40" y="40" width="176" height="176" rx="44" fill="url(#highlight)" opacity="0.15" pointer-events="none"/>
+  
+  <!-- Definitions -->
+  <defs>
+    <!-- Glow filter -->
+    <filter id="glow" x="0" y="0" width="300" height="300">
+      <feGaussianBlur stdDeviation="20" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <!-- Gradient for outer glow -->
+    <linearGradient id="gradient1" x1="32" y1="32" x2="224" y2="224" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#60A5FA"/>
+      <stop offset="50%" stop-color="#A855F7"/>
+      <stop offset="100%" stop-color="#EC4899"/>
+    </linearGradient>
+    
+    <!-- Glass background -->
+    <linearGradient id="glass-bg" x1="128" y1="32" x2="128" y2="224" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="rgba(255, 255, 255, 0.05)"/>
+      <stop offset="100%" stop-color="rgba(255, 255, 255, 0.02)"/>
+    </linearGradient>
+    
+    <!-- Border gradient -->
+    <linearGradient id="border-gradient" x1="32" y1="32" x2="224" y2="224" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="rgba(255, 255, 255, 0.2)"/>
+      <stop offset="50%" stop-color="rgba(255, 255, 255, 0.1)"/>
+      <stop offset="100%" stop-color="rgba(255, 255, 255, 0.2)"/>
+    </linearGradient>
+    
+    <!-- Liquid gradient -->
+    <linearGradient id="liquid-gradient" x1="32" y1="32" x2="224" y2="224" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="50%" stop-color="#A855F7"/>
+      <stop offset="100%" stop-color="#EC4899"/>
+    </linearGradient>
+    
+    <!-- Text gradient -->
+    <linearGradient id="text-gradient" x1="128" y1="60" x2="128" y2="180" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="50%" stop-color="#DBEAFE"/>
+      <stop offset="100%" stop-color="#E9D5FF"/>
+    </linearGradient>
+    
+    <!-- Inner highlight -->
+    <linearGradient id="highlight" x1="128" y1="40" x2="128" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="rgba(255, 255, 255, 0.3)"/>
+      <stop offset="100%" stop-color="rgba(255, 255, 255, 0)"/>
+    </linearGradient>
+  </defs>
+</svg>
