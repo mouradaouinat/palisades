@@ -25,7 +25,7 @@ export function About() {
                 <h4 className="text-3xl mb-2 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent group-hover:scale-110 transition-transform">
                   $50M
                 </h4>
-                <p className="text-white/60">Loan Volume YTD</p>
+                <p className="text-white/60">Advance Volume YTD</p>
                 <div className="w-full h-1 bg-gradient-to-r from-blue-400/20 to-purple-500/20 rounded-full mt-3">
                   <div className="w-4/5 h-full bg-gradient-to-r from-blue-400 to-purple-500 rounded-full"></div>
                 </div>

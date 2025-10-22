@@ -5,19 +5,19 @@ import { Button } from "./ui/button";
 
 export function Calculator() {
   const [credit, setCredit] = useState(20000);
-  const [months, setMonths] = useState(12);
+  const [months, setMonths] = useState(8);
 
-  const output = credit / (months * 30);
+  const output = (credit * 1.2) / (months * 30);
 
   return (
     <section className="py-12">
       <h2 className="text-4xl text-center lg:text-5xl mb-6 bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
-        Our Small Business Term Loan Calculator
+        Our Small Business Term Advance Calculator
       </h2>
       <p className="text-center text-white/70  max-w-5xl mx-auto">
-        Enter your desired loan amount and watch as our term loan calculator
+        Enter your desired Advance amount and watch as our term Advance calculator
         delivers easy-to-ready figures that will help you determine how much you
-        can afford and how much interest you are willing to pay.
+        can afford and how much factor rate you are willing to pay.
       </p>
       <div className="mx-auto w-screen max-w-5xl mt-12">
         <Card className="overflow-hidden">
@@ -38,7 +38,7 @@ export function Calculator() {
                   max={500000}
                   step={1000}
                   defaultValue={[credit]}
-                  onValueChange={([e]) => {
+                  onValueChange={([e]: number[]) => {
                     setCredit(e);
                   }}
                 />
@@ -51,10 +51,10 @@ export function Calculator() {
                   {months} Months
                 </span>
                 <Slider
-                  min={12}
-                  max={24}
+                  min={8}
+                  max={12}
                   step={1}
-                  onValueChange={([e]) => {
+                  onValueChange={([e]: number[]) => {
                     setMonths(e);
                   }}
                 />
@@ -69,7 +69,7 @@ export function Calculator() {
                 <Button variant="outline">Apply Now</Button>
               </div>
               <p className="text-center text-sm text-white/70  max-w-5xl mx-auto mt-4 px-5">
-                *Interest rates are approximate, actual rate will depend on
+                *factor rate rates are approximate, actual rate will depend on
                 other factors in addition to credit score.
               </p>
             </div>

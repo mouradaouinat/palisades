@@ -8,14 +8,13 @@ import { Calculator } from "./components/Calculator";
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-background overflow-x-hidden">
-      <Header />
+    <>
       <Hero />
       <Calculator />
       <Services />
       <About />
       <CTA />
-      <Footer />
-    </div>
+    </>
+     
   );
 }
