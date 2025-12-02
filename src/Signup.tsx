@@ -237,7 +237,7 @@ export function Signup() {
                       type="checkbox"
                       id="consentNonMarketing"
                       name="consentNonMarketing"
-                      checked={formData.consentNonMarketing}
+                      defaultChecked={formData.consentNonMarketing}
                       onChange={handleChange}
                       className="mt-1 w-5 h-5 rounded border-border bg-background cursor-pointer accent-primary"
                     />
@@ -250,9 +250,9 @@ export function Signup() {
                       scheduling links, booking confirmations, and follow-ups. Message frequency may vary. Reply 'HELP'
                       for assistance or 'STOP' to unsubscribe. Standard message and data rates may apply. My information
                       will be handled in accordance with the{" "}
-                      <a href="#" className="text-primary hover:underline">
+                      <Link to="/privacy-policy" className="text-primary hover:underline">
                         Privacy Policy
-                      </a>
+                      </Link>
                     </label>
                   </div>
                   {errors.consentNonMarketing && (
@@ -266,7 +266,7 @@ export function Signup() {
                     type="checkbox"
                     id="consentMarketing"
                     name="consentMarketing"
-                    checked={formData.consentMarketing}
+                    defaultChecked={formData.consentMarketing}
                     onChange={handleChange}
                     className="mt-1 w-5 h-5 rounded border-border bg-background cursor-pointer accent-primary"
                   />
@@ -278,9 +278,9 @@ export function Signup() {
                     SMS messages regarding promotional offers. Message frequency may vary. Reply 'HELP' for assistance
                     or 'STOP' to unsubscribe. Standard message and data rates may apply. My information will be handled
                     in accordance with the{" "}
-                    <a href="#" className="text-primary hover:underline">
+                    <Link to="/privacy-policy" className="text-primary hover:underline">
                       Privacy Policy
-                    </a>
+                    </Link>
                   </label>
                 </div>
               </FormSection>
