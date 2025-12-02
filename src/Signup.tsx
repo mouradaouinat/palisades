@@ -3,6 +3,7 @@ import type React from "react"
 import { useState } from "react"
 import FormSection from "./components/form/section"
 import FormInput from "./components/form/input"
+import { Link } from "react-router"
 
 interface FormErrors {
   [key: string]: string
@@ -314,13 +315,13 @@ export function Signup() {
         <div className="mt-8 text-center text-sm text-muted-foreground">
           <p>
             By submitting this form, you agree to our{" "}
-            <a href="#" className="text-indigo-500 hover:underline">
+            <Link to="/terms-of-service" className="text-indigo-500 hover:underline">
               Terms of Service
-            </a>{" "}
+            </Link>{" "}
             and{" "}
-            <a href="#" className="text-indigo-500 hover:underline">
+            <Link to="/privacy-policy" className="text-indigo-500 hover:underline">
               Privacy Policy
-            </a>
+            </Link>
           </p>
         </div>
       </div>
