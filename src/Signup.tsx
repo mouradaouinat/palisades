@@ -194,7 +194,7 @@ export function Signup() {
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <FormInput
-                    label="ISO Name"
+                    label="Name"
                     name="isoName"
                     type="text"
                     placeholder="Full name"
