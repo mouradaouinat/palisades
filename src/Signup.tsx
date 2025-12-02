@@ -36,6 +36,8 @@ export function Signup() {
     isoName: "",
     title: "",
     signature: "",
+    consentNonMarketing: false,
+    consentMarketing: false
   })
 
   const [submitted, setSubmitted] = useState(false)
@@ -222,6 +224,64 @@ export function Signup() {
                   required
                   error={errors.signature}
                 />
+              </FormSection>
+            </div>
+
+             <div className="border-t border-border pt-8">
+              <FormSection title="Communication Preferences" description="Choose how you'd like to receive updates">
+                {/* Non-Marketing SMS Consent */}
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      id="consentNonMarketing"
+                      name="consentNonMarketing"
+                      checked={formData.consentNonMarketing}
+                      onChange={handleChange}
+                      className="mt-1 w-5 h-5 rounded border-border bg-background cursor-pointer accent-primary"
+                    />
+                    <label
+                      htmlFor="consentNonMarketing"
+                      className="flex-1 cursor-pointer text-sm text-foreground leading-relaxed"
+                    >
+                      <span className="font-medium block mb-1">Service Updates & Notifications</span>I agree to receive
+                      non-marketing SMS messages regarding customer care, service updates, reminders, notifications,
+                      scheduling links, booking confirmations, and follow-ups. Message frequency may vary. Reply 'HELP'
+                      for assistance or 'STOP' to unsubscribe. Standard message and data rates may apply. My information
+                      will be handled in accordance with the{" "}
+                      <a href="#" className="text-primary hover:underline">
+                        Privacy Policy
+                      </a>
+                    </label>
+                  </div>
+                  {errors.consentNonMarketing && (
+                    <p className="text-sm text-red-500 ml-8">{errors.consentNonMarketing}</p>
+                  )}
+                </div>
+
+                {/* Marketing SMS Consent */}
+                <div className="flex items-start gap-3 mt-6">
+                  <input
+                    type="checkbox"
+                    id="consentMarketing"
+                    name="consentMarketing"
+                    checked={formData.consentMarketing}
+                    onChange={handleChange}
+                    className="mt-1 w-5 h-5 rounded border-border bg-background cursor-pointer accent-primary"
+                  />
+                  <label
+                    htmlFor="consentMarketing"
+                    className="flex-1 cursor-pointer text-sm text-foreground leading-relaxed"
+                  >
+                    <span className="font-medium block mb-1">Marketing Messages</span>I also agree to receive marketing
+                    SMS messages regarding promotional offers. Message frequency may vary. Reply 'HELP' for assistance
+                    or 'STOP' to unsubscribe. Standard message and data rates may apply. My information will be handled
+                    in accordance with the{" "}
+                    <a href="#" className="text-primary hover:underline">
+                      Privacy Policy
+                    </a>
+                  </label>
+                </div>
               </FormSection>
             </div>
 

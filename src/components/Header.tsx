@@ -1,5 +1,6 @@
 import { Button } from "./ui/button";
 import Logo from "./Logo";
+import { Link } from "react-router";
 
 export function Header() {
   return (
@@ -27,13 +28,13 @@ export function Header() {
               Technology
               <div className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-400 to-purple-500 group-hover:w-full transition-all duration-300"></div>
             </a>
-            <a
-              href="#contact"
+            <Link
+              to="/contact"
               className="text-white/80 hover:text-white transition-all duration-300 hover:scale-105 relative group"
             >
               Contact
               <div className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-400 to-purple-500 group-hover:w-full transition-all duration-300"></div>
-            </a>
+            </Link>
           </nav>
 
           {/* CTA Button */}
