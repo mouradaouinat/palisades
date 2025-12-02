@@ -39,7 +39,7 @@ export function Header() {
 
           {/* CTA Button */}
           <Button className="glass-card border-white/20 text-white hover:bg-white/10 bg-gradient-to-r from-blue-500/20 to-purple-500/20 backdrop-blur-lg">
-            Learn More
+            <Link to="/contact">Learn More</Link>
           </Button>
         </div>
       </div>
