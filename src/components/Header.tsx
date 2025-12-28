@@ -9,6 +9,7 @@ export function Header() {
           {/* Logo */}
           <div className="flex items-center">
             <Logo />
+            <div className="uppercase -ml-18">PALISADES ADVANCE</div>
           </div>
 
           {/* Navigation */}
