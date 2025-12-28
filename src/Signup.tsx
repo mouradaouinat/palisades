@@ -3,6 +3,7 @@ import type React from "react"
 import { useState } from "react"
 import FormSection from "./components/form/section"
 import FormInput from "./components/form/input"
+import { Link } from "react-router"
 
 interface FormErrors {
   [key: string]: string
@@ -36,6 +37,8 @@ export function Signup() {
     isoName: "",
     title: "",
     signature: "",
+    consentNonMarketing: false,
+    consentMarketing: false
   })
 
   const [submitted, setSubmitted] = useState(false)
@@ -192,7 +195,7 @@ export function Signup() {
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <FormInput
-                    label="ISO Name"
+                    label="Name"
                     name="isoName"
                     type="text"
                     placeholder="Full name"
@@ -225,6 +228,64 @@ export function Signup() {
               </FormSection>
             </div>
 
+             <div className="border-t border-border pt-8">
+              <FormSection title="Communication Preferences" description="Choose how you'd like to receive updates">
+                {/* Non-Marketing SMS Consent */}
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      id="consentNonMarketing"
+                      name="consentNonMarketing"
+                      defaultChecked={formData.consentNonMarketing}
+                      onChange={handleChange}
+                      className="mt-1 w-5 h-5 rounded border-border bg-background cursor-pointer accent-primary"
+                    />
+                    <label
+                      htmlFor="consentNonMarketing"
+                      className="flex-1 cursor-pointer text-sm text-foreground leading-relaxed"
+                    >
+                      <span className="font-medium block mb-1">Service Updates & Notifications</span>I agree to receive
+                      non-marketing SMS messages regarding customer care, service updates, reminders, notifications,
+                      scheduling links, booking confirmations, and follow-ups. Message frequency may vary. Reply 'HELP'
+                      for assistance or 'STOP' to unsubscribe. Standard message and data rates may apply. My information
+                      will be handled in accordance with the{" "}
+                      <Link to="/privacy-policy" className="text-primary hover:underline">
+                        Privacy Policy
+                      </Link>
+                    </label>
+                  </div>
+                  {errors.consentNonMarketing && (
+                    <p className="text-sm text-red-500 ml-8">{errors.consentNonMarketing}</p>
+                  )}
+                </div>
+
+                {/* Marketing SMS Consent */}
+                <div className="flex items-start gap-3 mt-6">
+                  <input
+                    type="checkbox"
+                    id="consentMarketing"
+                    name="consentMarketing"
+                    defaultChecked={formData.consentMarketing}
+                    onChange={handleChange}
+                    className="mt-1 w-5 h-5 rounded border-border bg-background cursor-pointer accent-primary"
+                  />
+                  <label
+                    htmlFor="consentMarketing"
+                    className="flex-1 cursor-pointer text-sm text-foreground leading-relaxed"
+                  >
+                    <span className="font-medium block mb-1">Marketing Messages</span>I also agree to receive marketing
+                    SMS messages regarding promotional offers. Message frequency may vary. Reply 'HELP' for assistance
+                    or 'STOP' to unsubscribe. Standard message and data rates may apply. My information will be handled
+                    in accordance with the{" "}
+                    <Link to="/privacy-policy" className="text-primary hover:underline">
+                      Privacy Policy
+                    </Link>
+                  </label>
+                </div>
+              </FormSection>
+            </div>
+
             {/* Submit Button */}
             <div className="flex gap-4 pt-6">
               <button
@@ -254,13 +315,13 @@ export function Signup() {
         <div className="mt-8 text-center text-sm text-muted-foreground">
           <p>
             By submitting this form, you agree to our{" "}
-            <a href="#" className="text-indigo-500 hover:underline">
+            <Link to="/terms-of-service" className="text-indigo-500 hover:underline">
               Terms of Service
-            </a>{" "}
+            </Link>{" "}
             and{" "}
-            <a href="#" className="text-indigo-500 hover:underline">
+            <Link to="/privacy-policy" className="text-indigo-500 hover:underline">
               Privacy Policy
-            </a>
+            </Link>
           </p>
         </div>
       </div>

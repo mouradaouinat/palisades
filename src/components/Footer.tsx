@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import Logo from "./Logo";
 
 export function Footer() {
@@ -128,20 +129,18 @@ export function Footer() {
             <h4 className="mb-6 text-white">Legal</h4>
             <ul className="space-y-3 text-sm">
               <li>
-                <a
-                  href="#"
+                <Link to="/privacy-policy"
                   className="text-white/70 hover:text-pink-400 transition-colors hover:translate-x-1 transform inline-block"
                 >
                   Privacy Policy
-                </a>
+                </Link>
               </li>
               <li>
-                <a
-                  href="#"
+                <Link to="/terms-of-service"
                   className="text-white/70 hover:text-pink-400 transition-colors hover:translate-x-1 transform inline-block"
                 >
                   Terms of Service
-                </a>
+                </Link>
               </li>
               <li>
                 <a
