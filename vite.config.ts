@@ -1,11 +1,24 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
+import { createRequire } from "node:module";
 import svgr from "vite-plugin-svgr";
 import tailwindcss from '@tailwindcss/vite'
 
+const require = createRequire(import.meta.url);
+const applicationsApi = require("./api/applications.js");
+
+function mockApplicationsApi() {
+  return {
+    name: "mock-applications-api",
+    configureServer(server) {
+      server.middlewares.use("/api/applications", applicationsApi);
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [svgr({ include: "**/*.svg?*" }), react(), tailwindcss()],
+  plugins: [mockApplicationsApi(), svgr({ include: "**/*.svg?*" }), react(), tailwindcss()],
   resolve: {
     extensions: [".js", ".jsx", ".ts", ".tsx", ".json"],
     alias: {

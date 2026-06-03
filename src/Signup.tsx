@@ -3,10 +3,27 @@ import type React from "react"
 import { useState } from "react"
 import FormSection from "./components/form/section"
 import FormInput from "./components/form/input"
+import BankStatementDropzone, { MAX_BANK_STATEMENTS } from "./components/form/bank-statement-dropzone"
 import { Link } from "react-router"
 
 interface FormErrors {
   [key: string]: string
+}
+
+const initialFormData = {
+  // Company Information
+  legalName: "",
+  dba: "",
+  ein: "",
+  address: "",
+  email: "",
+  phone: "",
+  // ISO Information
+  isoName: "",
+  title: "",
+  signature: "",
+  consentNonMarketing: false,
+  consentMarketing: false,
 }
 
 const validateEmail = (email: string): boolean => {
@@ -25,30 +42,19 @@ const validatePhone = (phone: string): boolean => {
 }
 
 export function Signup() {
-  const [formData, setFormData] = useState({
-    // Company Information
-    legalName: "",
-    dba: "",
-    ein: "",
-    address: "",
-    email: "",
-    phone: "",
-    // ISO Information
-    isoName: "",
-    title: "",
-    signature: "",
-    consentNonMarketing: false,
-    consentMarketing: false
-  })
+  const [formData, setFormData] = useState(initialFormData)
+  const [bankStatements, setBankStatements] = useState<File[]>([])
 
   const [submitted, setSubmitted] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState("")
   const [errors, setErrors] = useState<FormErrors>({})
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
+    const { checked, name, type, value } = e.target
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: type === "checkbox" ? checked : value,
     }))
     // Clear error for this field when user starts typing
     if (errors[name]) {
@@ -95,21 +101,70 @@ export function Signup() {
     if (!formData.signature.trim()) {
       newErrors.signature = "Signature is required"
     }
+    if (bankStatements.length !== MAX_BANK_STATEMENTS) {
+      newErrors.bankStatements = `Upload exactly ${MAX_BANK_STATEMENTS} bank statements`
+    }
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleBankStatementsChange = (files: File[]) => {
+    setBankStatements(files)
+    if (errors.bankStatements) {
+      setErrors((prev) => ({
+        ...prev,
+        bankStatements: "",
+      }))
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setSubmitted(false)
+    setSubmitError("")
 
     if (!validateForm()) {
       return
     }
 
-    console.log("Form submitted:", formData)
-    setSubmitted(true)
-    setTimeout(() => setSubmitted(false), 3000)
+    const applicationData = new FormData()
+    applicationData.append("application", JSON.stringify(formData))
+    Object.entries(formData).forEach(([key, value]) => {
+      applicationData.append(key, String(value))
+    })
+    bankStatements.forEach((file) => {
+      applicationData.append("bankStatements", file, file.name)
+    })
+
+    try {
+      setIsSubmitting(true)
+      const response = await fetch("/api/applications", {
+        method: "POST",
+        body: applicationData,
+      })
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(result?.message || "Application upload failed")
+      }
+
+      console.log("Application submitted:", result)
+      setSubmitted(true)
+      setTimeout(() => setSubmitted(false), 3000)
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Application upload failed")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleReset = () => {
+    setFormData(initialFormData)
+    setBankStatements([])
+    setErrors({})
+    setSubmitError("")
+    setSubmitted(false)
   }
 
   return (
@@ -122,7 +177,7 @@ export function Signup() {
 
         {/* Form Card */}
         <div className="bg-card rounded-2xl shadow-lg border border-border p-8 md:p-10">
-          <form onSubmit={handleSubmit} className="space-y-8">
+          <form onSubmit={handleSubmit} onReset={handleReset} className="space-y-8">
             {/* Company Information Section */}
             <FormSection title="Company Information" description="Provide your business details">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -187,6 +242,17 @@ export function Signup() {
               />
             </FormSection>
 
+            <div className="border-t border-border pt-8">
+              <FormSection title="Bank Statements" description="Upload the three most recent statements">
+                <BankStatementDropzone
+                  files={bankStatements}
+                  onFilesChange={handleBankStatementsChange}
+                  error={errors.bankStatements}
+                  disabled={isSubmitting}
+                />
+              </FormSection>
+            </div>
+
             {/* ISO Information Section */}
             <div className="border-t border-border pt-8">
               <FormSection
@@ -237,7 +303,7 @@ export function Signup() {
                       type="checkbox"
                       id="consentNonMarketing"
                       name="consentNonMarketing"
-                      defaultChecked={formData.consentNonMarketing}
+                      checked={formData.consentNonMarketing}
                       onChange={handleChange}
                       className="mt-1 w-5 h-5 rounded border-border bg-background cursor-pointer accent-primary"
                     />
@@ -266,7 +332,7 @@ export function Signup() {
                     type="checkbox"
                     id="consentMarketing"
                     name="consentMarketing"
-                    defaultChecked={formData.consentMarketing}
+                    checked={formData.consentMarketing}
                     onChange={handleChange}
                     className="mt-1 w-5 h-5 rounded border-border bg-background cursor-pointer accent-primary"
                   />
@@ -290,12 +356,14 @@ export function Signup() {
             <div className="flex gap-4 pt-6">
               <button
                 type="submit"
-                className="flex-1 bg-indigo-500 text-primary-foreground font-semibold py-3 px-6 rounded-lg hover:bg-bg-indigo-500/90 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-card"
+                disabled={isSubmitting}
+                className="flex-1 bg-indigo-500 text-primary-foreground font-semibold py-3 px-6 rounded-lg hover:bg-indigo-500/90 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-card disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Submit Application
+                {isSubmitting ? "Submitting..." : "Submit Application"}
               </button>
               <button
                 type="reset"
+                disabled={isSubmitting}
                 className="px-6 py-3 border border-border text-foreground font-semibold rounded-lg hover:bg-muted transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-card"
               >
                 Clear
@@ -305,7 +373,13 @@ export function Signup() {
             {/* Success Message */}
             {submitted && (
               <div className="bg-accent/10 border border-accent rounded-lg p-4 text-accent-foreground text-center font-medium animate-in fade-in">
-                ✓ Application submitted successfully!
+                Application submitted successfully!
+              </div>
+            )}
+
+            {submitError && (
+              <div className="bg-destructive/10 border border-destructive rounded-lg p-4 text-destructive text-center font-medium">
+                {submitError}
               </div>
             )}
           </form>
@@ -328,4 +402,3 @@ export function Signup() {
     </div>
   )
 }
-
