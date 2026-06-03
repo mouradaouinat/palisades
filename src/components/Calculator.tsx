@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader } from "./ui/card";
 import { Slider } from "./ui/slider";
 import { Button } from "./ui/button";
+import { Link } from "react-router";
 
 export function Calculator() {
   const [credit, setCredit] = useState(20000);
@@ -15,9 +16,9 @@ export function Calculator() {
         Our Small Business Term Advance Calculator
       </h2>
       <p className="text-center text-white/70  max-w-5xl mx-auto">
-        Enter your desired Advance amount and watch as our term Advance calculator
-        delivers easy-to-ready figures that will help you determine how much you
-        can afford and how much factor rate you are willing to pay.
+        Enter your desired Advance amount and watch as our term Advance
+        calculator delivers easy-to-ready figures that will help you determine
+        how much you can afford and how much factor rate you are willing to pay.
       </p>
       <div className="mx-auto w-screen max-w-5xl mt-12">
         <Card className="overflow-hidden">
@@ -66,7 +67,9 @@ export function Calculator() {
                 ${output.toFixed(2)}
               </div>
               <div className="flex items-center justify-center mt-3">
-                <Button variant="outline">Apply Now</Button>
+                <Link to="/contact">
+                  <Button variant="outline">Apply Now</Button>
+                </Link>
               </div>
               <p className="text-center text-sm text-white/70  max-w-5xl mx-auto mt-4 px-5">
                 *factor rate rates are approximate, actual rate will depend on
