@@ -26,11 +26,13 @@ module.exports = async function handler(req, res) {
   }
 
   const storage = getStorageInfo()
+  const readyForProduction = storage.fileProvider === "vercel-blob" && storage.databaseProvider === "supabase"
 
   sendJson(res, 200, {
     ok: true,
-    directBlobUploads: storage.fileProvider === "vercel-blob",
+    directBlobUploads: readyForProduction,
     durableDatabase: storage.databaseProvider === "supabase",
+    readyForProduction,
     storage,
   })
 }

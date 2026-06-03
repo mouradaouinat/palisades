@@ -11,8 +11,6 @@ const DB_PATH = path.join(STORAGE_ROOT, "applications.json")
 const UPLOADS_DIR = path.join(STORAGE_ROOT, "uploads")
 const APPLICATIONS_TABLE = process.env.SUPABASE_APPLICATIONS_TABLE || "applications"
 
-let supabaseClient
-
 function supabaseUrl() {
   return process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ""
 }
@@ -21,8 +19,30 @@ function supabaseServiceRoleKey() {
   return process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || ""
 }
 
+function legacyJwtRole(key) {
+  const [, payload] = String(key || "").split(".")
+
+  if (!payload) {
+    return ""
+  }
+
+  try {
+    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")).role || ""
+  } catch {
+    return ""
+  }
+}
+
+function isPublishableSupabaseKey(key) {
+  const publishableKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || ""
+
+  return Boolean(key && (/^sb_publishable_/i.test(key) || key === publishableKey || legacyJwtRole(key) === "anon"))
+}
+
 function hasSupabase() {
-  return Boolean(supabaseUrl() && supabaseServiceRoleKey())
+  const key = supabaseServiceRoleKey()
+
+  return Boolean(supabaseUrl() && key && !isPublishableSupabaseKey(key))
 }
 
 function hasBlob() {
@@ -56,6 +76,10 @@ function requireProductionStorage() {
   }
 
   if (!hasSupabase()) {
+    if (isPublishableSupabaseKey(supabaseServiceRoleKey())) {
+      throw new Error("Supabase is not configured. SUPABASE_SERVICE_ROLE_KEY must be a secret/service_role key, not a publishable or anon key.")
+    }
+
     throw new Error("Supabase is not configured. Set SUPABASE_URL or VITE_SUPABASE_URL, plus SUPABASE_SERVICE_ROLE_KEY in Vercel.")
   }
 
@@ -64,19 +88,57 @@ function requireProductionStorage() {
   }
 }
 
-function getSupabaseClient() {
-  if (!supabaseClient) {
-    const { createClient } = require("@supabase/supabase-js")
+function supabaseApiUrl(params) {
+  const baseUrl = supabaseUrl().replace(/\/+$/, "")
+  const url = new URL(`${baseUrl}/rest/v1/${encodeURIComponent(APPLICATIONS_TABLE)}`)
 
-    supabaseClient = createClient(supabaseUrl(), supabaseServiceRoleKey(), {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    })
+  Object.entries(params || {}).forEach(([key, value]) => {
+    url.searchParams.set(key, value)
+  })
+
+  return url
+}
+
+function supabaseHeaders(extraHeaders) {
+  const key = supabaseServiceRoleKey()
+  const headers = {
+    apikey: key,
+    Accept: "application/json",
+    ...extraHeaders,
   }
 
-  return supabaseClient
+  if (!/^sb_secret_/i.test(key)) {
+    headers.Authorization = `Bearer ${key}`
+  }
+
+  return headers
+}
+
+async function supabaseRequest(params, options) {
+  const response = await fetch(supabaseApiUrl(params), {
+    ...options,
+    headers: supabaseHeaders(options?.headers),
+  })
+  const text = await response.text()
+
+  if (!response.ok) {
+    let message = text || `HTTP ${response.status}`
+
+    try {
+      const payload = JSON.parse(text)
+      message = payload.message || payload.error || message
+    } catch {
+      // Keep the raw text.
+    }
+
+    throw new Error(message)
+  }
+
+  if (!text) {
+    return null
+  }
+
+  return JSON.parse(text)
 }
 
 async function ensureLocalStorage() {
@@ -350,9 +412,18 @@ async function insertRecord(record) {
   requireProductionStorage()
 
   if (hasSupabase()) {
-    const { error } = await getSupabaseClient().from(APPLICATIONS_TABLE).insert(recordToRow(record))
-
-    throwSupabaseError("insert", error)
+    try {
+      await supabaseRequest(null, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify(recordToRow(record)),
+      })
+    } catch (error) {
+      throwSupabaseError("insert", error)
+    }
     return
   }
 
@@ -362,6 +433,8 @@ async function insertRecord(record) {
 }
 
 async function createApplication(fields, files) {
+  requireProductionStorage()
+
   const id = `app_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`
   const storedFiles = await storeFiles(id, files)
   const record = buildRecord(fields, storedFiles)
@@ -373,6 +446,8 @@ async function createApplication(fields, files) {
 }
 
 async function createApplicationFromStoredFiles(fields, storedFiles) {
+  requireProductionStorage()
+
   const record = buildRecord(fields, storedFiles.map(normalizeStoredFile))
 
   await insertRecord(record)
@@ -384,12 +459,16 @@ async function listApplications() {
   requireProductionStorage()
 
   if (hasSupabase()) {
-    const { data, error } = await getSupabaseClient()
-      .from(APPLICATIONS_TABLE)
-      .select("*")
-      .order("created_at", { ascending: false })
+    let data
 
-    throwSupabaseError("list", error)
+    try {
+      data = await supabaseRequest({
+        select: "*",
+        order: "created_at.desc",
+      })
+    } catch (error) {
+      throwSupabaseError("list", error)
+    }
 
     return (data || []).map(rowToRecord).map(publicSummary)
   }
@@ -403,19 +482,23 @@ async function getApplication(id) {
   requireProductionStorage()
 
   if (hasSupabase()) {
-    const { data, error } = await getSupabaseClient()
-      .from(APPLICATIONS_TABLE)
-      .select("*")
-      .eq("id", id)
-      .maybeSingle()
+    let data
 
-    throwSupabaseError("detail lookup", error)
+    try {
+      data = await supabaseRequest({
+        select: "*",
+        id: `eq.${id}`,
+        limit: "1",
+      })
+    } catch (error) {
+      throwSupabaseError("detail lookup", error)
+    }
 
-    if (!data) {
+    if (!data || data.length === 0) {
       return null
     }
 
-    return publicRecord(rowToRecord(data))
+    return publicRecord(rowToRecord(data[0]))
   }
 
   const db = await readLocalDb()
@@ -434,14 +517,19 @@ async function getApplicationFile(applicationId, fileId) {
   let record
 
   if (hasSupabase()) {
-    const { data, error } = await getSupabaseClient()
-      .from(APPLICATIONS_TABLE)
-      .select("*")
-      .eq("id", applicationId)
-      .maybeSingle()
+    let data
 
-    throwSupabaseError("file lookup", error)
-    record = data ? rowToRecord(data) : null
+    try {
+      data = await supabaseRequest({
+        select: "*",
+        id: `eq.${applicationId}`,
+        limit: "1",
+      })
+    } catch (error) {
+      throwSupabaseError("file lookup", error)
+    }
+
+    record = data && data.length > 0 ? rowToRecord(data[0]) : null
   } else {
     const db = await readLocalDb()
     record = db.applications.find((application) => application.id === applicationId)

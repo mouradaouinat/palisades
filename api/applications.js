@@ -82,7 +82,30 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload))
 }
 
+function sendServerError(res, error) {
+  const message = error instanceof Error ? error.message : "API handler failed"
+
+  console.error("Applications API failed", error)
+  sendJson(res, 500, {
+    ok: false,
+    message,
+    storage: storageInfo(),
+  })
+}
+
 function readJsonBody(req) {
+  if (req.body && typeof req.body === "object") {
+    return Promise.resolve(req.body)
+  }
+
+  if (typeof req.body === "string") {
+    try {
+      return Promise.resolve(JSON.parse(req.body))
+    } catch (error) {
+      return Promise.reject(error)
+    }
+  }
+
   return new Promise((resolve, reject) => {
     let body = ""
 
@@ -453,29 +476,33 @@ async function handleGet(req, res) {
 }
 
 module.exports = async function handler(req, res) {
-  setCorsHeaders(res)
+  try {
+    setCorsHeaders(res)
 
-  if (req.method === "OPTIONS") {
-    res.statusCode = 204
-    res.end()
-    return
+    if (req.method === "OPTIONS") {
+      res.statusCode = 204
+      res.end()
+      return
+    }
+
+    if (req.method === "GET") {
+      await handleGet(req, res)
+      return
+    }
+
+    if (req.method === "POST") {
+      await handlePost(req, res)
+      return
+    }
+
+    sendJson(res, 405, {
+      ok: false,
+      message: "Method not allowed",
+      allowedMethods: endpointContract.methods,
+    })
+  } catch (error) {
+    sendServerError(res, error)
   }
-
-  if (req.method === "GET") {
-    await handleGet(req, res)
-    return
-  }
-
-  if (req.method === "POST") {
-    await handlePost(req, res)
-    return
-  }
-
-  sendJson(res, 405, {
-    ok: false,
-    message: "Method not allowed",
-    allowedMethods: endpointContract.methods,
-  })
 }
 
 module.exports.config = {
