@@ -12,6 +12,8 @@ function loadApiHandler(modulePath) {
     modulePath,
     "./api/lib/application-store.js",
     "./api/lib/backoffice-auth.js",
+    "./api/blob-upload.js",
+    "./api/storage-config.js",
   ];
 
   apiModules.forEach((apiModule) => {
@@ -46,6 +48,8 @@ function mockApplicationsApi() {
     configureServer(server) {
       server.middlewares.use("/api/applications", apiMiddleware("./api/applications.js"));
       server.middlewares.use("/api/backoffice-auth", apiMiddleware("./api/backoffice-auth.js"));
+      server.middlewares.use("/api/blob-upload", apiMiddleware("./api/blob-upload.js"));
+      server.middlewares.use("/api/storage-config", apiMiddleware("./api/storage-config.js"));
     },
   };
 }

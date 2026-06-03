@@ -1,5 +1,6 @@
 import type React from "react"
 
+import { upload } from "@vercel/blob/client"
 import { useState } from "react"
 import FormSection from "./components/form/section"
 import FormInput from "./components/form/input"
@@ -71,6 +72,7 @@ export function Signup() {
 
   const [submitted, setSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitStatus, setSubmitStatus] = useState("")
   const [submitError, setSubmitError] = useState("")
   const [errors, setErrors] = useState<FormErrors>({})
 
@@ -156,27 +158,75 @@ export function Signup() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitted(false)
+    setSubmitStatus("")
     setSubmitError("")
 
     if (!validateForm()) {
       return
     }
 
-    const applicationData = new FormData()
-    applicationData.append("application", JSON.stringify(formData))
-    Object.entries(formData).forEach(([key, value]) => {
-      applicationData.append(key, String(value))
-    })
-    bankStatements.forEach((file) => {
-      applicationData.append("bankStatements", file, file.name)
-    })
-
     try {
       setIsSubmitting(true)
-      const response = await fetch("/api/applications", {
-        method: "POST",
-        body: applicationData,
-      })
+      setSubmitStatus("Preparing application...")
+
+      const configResponse = await fetch("/api/storage-config").catch(() => null)
+      const storageConfig = configResponse?.ok ? await configResponse.json() : null
+      let response: Response
+
+      if (storageConfig?.directBlobUploads) {
+        setSubmitStatus("Uploading bank statements...")
+        const uploadedStatements = await Promise.all(
+          bankStatements.map(async (file, index) => {
+            const blob = await upload(`bank-statements/${Date.now()}-${index + 1}-${file.name}`, file, {
+              access: "private",
+              contentType: file.type || "application/octet-stream",
+              handleUploadUrl: "/api/blob-upload",
+              multipart: true,
+              clientPayload: JSON.stringify({
+                field: "bankStatements",
+                originalFilename: file.name,
+              }),
+            })
+
+            return {
+              ...blob,
+              field: "bankStatements",
+              originalFilename: file.name,
+              mimetype: file.type || blob.contentType || "application/octet-stream",
+              size: file.size,
+              storageProvider: "vercel-blob",
+            }
+          }),
+        )
+
+        setSubmitStatus("Saving application...")
+        response = await fetch("/api/applications", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            application: formData,
+            bankStatements: uploadedStatements,
+          }),
+        })
+      } else {
+        const applicationData = new FormData()
+        applicationData.append("application", JSON.stringify(formData))
+        Object.entries(formData).forEach(([key, value]) => {
+          applicationData.append(key, String(value))
+        })
+        bankStatements.forEach((file) => {
+          applicationData.append("bankStatements", file, file.name)
+        })
+
+        setSubmitStatus("Uploading application...")
+        response = await fetch("/api/applications", {
+          method: "POST",
+          body: applicationData,
+        })
+      }
+
       const result = await response.json().catch(() => null)
 
       if (!response.ok) {
@@ -184,12 +234,14 @@ export function Signup() {
       }
 
       console.log("Application submitted:", result)
+      setSubmitStatus("")
       setSubmitted(true)
       setTimeout(() => setSubmitted(false), 3000)
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Application upload failed")
     } finally {
       setIsSubmitting(false)
+      setSubmitStatus("")
     }
   }
 
@@ -197,6 +249,7 @@ export function Signup() {
     setFormData(initialFormData)
     setBankStatements([])
     setErrors({})
+    setSubmitStatus("")
     setSubmitError("")
     setSubmitted(false)
   }
@@ -406,6 +459,7 @@ export function Signup() {
             </div>
 
             {/* Submit Button */}
+            {submitStatus && <p className="text-sm text-muted-foreground">{submitStatus}</p>}
             <div className="flex gap-4 pt-6">
               <button
                 type="submit"

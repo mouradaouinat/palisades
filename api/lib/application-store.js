@@ -9,16 +9,77 @@ const STORAGE_ROOT =
   (process.env.VERCEL ? path.join(os.tmpdir(), "palisades-storage") : path.join(process.cwd(), "storage"))
 const DB_PATH = path.join(STORAGE_ROOT, "applications.json")
 const UPLOADS_DIR = path.join(STORAGE_ROOT, "uploads")
+const APPLICATIONS_TABLE = process.env.SUPABASE_APPLICATIONS_TABLE || "applications"
 
-function storageInfo() {
+let supabaseClient
+
+function supabaseUrl() {
+  return process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ""
+}
+
+function supabaseServiceRoleKey() {
+  return process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || ""
+}
+
+function hasSupabase() {
+  return Boolean(supabaseUrl() && supabaseServiceRoleKey())
+}
+
+function hasBlob() {
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN)
+}
+
+function getStorageInfo() {
   return {
-    dbPath: DB_PATH,
-    uploadsDir: UPLOADS_DIR,
-    storageRoot: STORAGE_ROOT,
+    databaseProvider: hasSupabase() ? "supabase" : "local-json",
+    fileProvider: hasBlob() ? "vercel-blob" : "local-filesystem",
+    local: {
+      dbPath: DB_PATH,
+      uploadsDir: UPLOADS_DIR,
+      storageRoot: STORAGE_ROOT,
+    },
+    supabase: {
+      table: APPLICATIONS_TABLE,
+    },
+    env: {
+      database: "SUPABASE_URL or VITE_SUPABASE_URL, plus SUPABASE_SERVICE_ROLE_KEY",
+      blob: "BLOB_READ_WRITE_TOKEN",
+    },
   }
 }
 
-async function ensureStorage() {
+const storageInfo = getStorageInfo
+
+function requireProductionStorage() {
+  if (!process.env.VERCEL) {
+    return
+  }
+
+  if (!hasSupabase()) {
+    throw new Error("Supabase is not configured. Set SUPABASE_URL or VITE_SUPABASE_URL, plus SUPABASE_SERVICE_ROLE_KEY in Vercel.")
+  }
+
+  if (!hasBlob()) {
+    throw new Error("Vercel Blob is not configured. Set BLOB_READ_WRITE_TOKEN in Vercel.")
+  }
+}
+
+function getSupabaseClient() {
+  if (!supabaseClient) {
+    const { createClient } = require("@supabase/supabase-js")
+
+    supabaseClient = createClient(supabaseUrl(), supabaseServiceRoleKey(), {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
+  }
+
+  return supabaseClient
+}
+
+async function ensureLocalStorage() {
   await fsp.mkdir(UPLOADS_DIR, { recursive: true })
 
   if (!fs.existsSync(DB_PATH)) {
@@ -26,8 +87,8 @@ async function ensureStorage() {
   }
 }
 
-async function readDb() {
-  await ensureStorage()
+async function readLocalDb() {
+  await ensureLocalStorage()
 
   try {
     const rawDb = await fsp.readFile(DB_PATH, "utf8")
@@ -47,8 +108,8 @@ async function readDb() {
   }
 }
 
-async function writeDb(db) {
-  await ensureStorage()
+async function writeLocalDb(db) {
+  await ensureLocalStorage()
   const tempPath = `${DB_PATH}.tmp`
 
   await fsp.writeFile(tempPath, JSON.stringify(db, null, 2))
@@ -72,8 +133,8 @@ function normalizeFields(fields) {
     dateOfBirth: String(firstValue(fields.dateOfBirth) || ""),
     ssn: String(firstValue(fields.ssn) || ""),
     signature: String(firstValue(fields.signature) || ""),
-    consentNonMarketing: firstValue(fields.consentNonMarketing) === "true",
-    consentMarketing: firstValue(fields.consentMarketing) === "true",
+    consentNonMarketing: firstValue(fields.consentNonMarketing) === true || firstValue(fields.consentNonMarketing) === "true",
+    consentMarketing: firstValue(fields.consentMarketing) === true || firstValue(fields.consentMarketing) === "true",
   }
 }
 
@@ -95,7 +156,7 @@ function extensionFor(filename) {
   return filename.slice(index).toLowerCase()
 }
 
-async function storeFiles(applicationId, files) {
+async function storeFilesLocally(applicationId, files) {
   const applicationDir = path.join(UPLOADS_DIR, applicationId)
   await fsp.mkdir(applicationDir, { recursive: true })
 
@@ -111,6 +172,7 @@ async function storeFiles(applicationId, files) {
 
       return {
         id: fileId,
+        storageProvider: "local-filesystem",
         field: "bankStatements",
         originalFilename,
         mimetype: file.mimetype || "application/octet-stream",
@@ -122,14 +184,75 @@ async function storeFiles(applicationId, files) {
   )
 }
 
+async function storeFilesInBlob(applicationId, files) {
+  const { put } = require("@vercel/blob")
+
+  return Promise.all(
+    files.map(async (file) => {
+      const fileId = crypto.randomUUID()
+      const originalFilename = sanitizeFilename(file.originalFilename)
+      const pathname = `bank-statements/${applicationId}/${fileId}-${originalFilename}`
+      const contents = await fsp.readFile(file.filepath)
+
+      try {
+        const blob = await put(pathname, contents, {
+          access: "private",
+          addRandomSuffix: false,
+          contentType: file.mimetype || "application/octet-stream",
+          multipart: true,
+        })
+
+        return normalizeStoredFile({
+          ...blob,
+          id: fileId,
+          field: "bankStatements",
+          originalFilename,
+          mimetype: file.mimetype || blob.contentType || "application/octet-stream",
+          size: file.size,
+          storageProvider: "vercel-blob",
+        })
+      } finally {
+        await fsp.rm(file.filepath, { force: true })
+      }
+    }),
+  )
+}
+
+async function storeFiles(applicationId, files) {
+  if (hasBlob()) {
+    return storeFilesInBlob(applicationId, files)
+  }
+
+  return storeFilesLocally(applicationId, files)
+}
+
+function normalizeStoredFile(file) {
+  return {
+    id: file.id || crypto.randomUUID(),
+    storageProvider: file.storageProvider || "vercel-blob",
+    field: file.field || "bankStatements",
+    originalFilename: sanitizeFilename(file.originalFilename || file.pathname || file.url || "statement"),
+    mimetype: file.mimetype || file.contentType || "application/octet-stream",
+    size: Number(file.size || 0),
+    storedFilename: file.storedFilename || path.basename(file.pathname || file.url || ""),
+    relativePath: file.relativePath,
+    pathname: file.pathname,
+    url: file.url,
+    downloadUrl: file.downloadUrl || file.url,
+    etag: file.etag,
+  }
+}
+
 function publicFile(file, applicationId) {
   return {
     id: file.id,
+    storageProvider: file.storageProvider || "local-filesystem",
     field: file.field,
     originalFilename: file.originalFilename,
     mimetype: file.mimetype,
     size: file.size,
     storedFilename: file.storedFilename,
+    pathname: file.pathname,
     downloadUrl: `/api/applications?applicationId=${encodeURIComponent(applicationId)}&fileId=${encodeURIComponent(
       file.id,
     )}`,
@@ -137,6 +260,8 @@ function publicFile(file, applicationId) {
 }
 
 function publicRecord(record) {
+  const files = Array.isArray(record.files) ? record.files : []
+
   return {
     id: record.id,
     status: record.status,
@@ -145,28 +270,30 @@ function publicRecord(record) {
     source: record.source,
     applicant: record.applicant,
     form: record.form,
-    fileCount: record.files.length,
-    files: record.files.map((file) => publicFile(file, record.id)),
+    fileCount: files.length,
+    files: files.map((file) => publicFile(file, record.id)),
   }
 }
 
 function publicSummary(record) {
+  const files = Array.isArray(record.files) ? record.files : []
+
   return {
     id: record.id,
     status: record.status,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     applicant: record.applicant,
-    fileCount: record.files.length,
+    fileCount: files.length,
   }
 }
 
-async function createApplication(fields, files) {
+function buildRecord(fields, storedFiles) {
   const now = new Date().toISOString()
   const id = `app_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`
   const form = normalizeFields(fields)
-  const storedFiles = await storeFiles(id, files)
-  const record = {
+
+  return {
     id,
     status: "new",
     createdAt: now,
@@ -183,22 +310,115 @@ async function createApplication(fields, files) {
     form,
     files: storedFiles,
   }
+}
 
-  const db = await readDb()
+function rowToRecord(row) {
+  const normalizeJson = (value) => (typeof value === "string" ? JSON.parse(value) : value)
+
+  return {
+    id: row.id,
+    status: row.status,
+    createdAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString(),
+    source: row.source,
+    applicant: normalizeJson(row.applicant),
+    form: normalizeJson(row.form),
+    files: normalizeJson(row.files),
+  }
+}
+
+function recordToRow(record) {
+  return {
+    id: record.id,
+    status: record.status,
+    created_at: record.createdAt,
+    updated_at: record.updatedAt,
+    source: record.source,
+    applicant: record.applicant,
+    form: record.form,
+    files: record.files,
+  }
+}
+
+function throwSupabaseError(action, error) {
+  if (error) {
+    throw new Error(`Supabase ${action} failed: ${error.message}`)
+  }
+}
+
+async function insertRecord(record) {
+  requireProductionStorage()
+
+  if (hasSupabase()) {
+    const { error } = await getSupabaseClient().from(APPLICATIONS_TABLE).insert(recordToRow(record))
+
+    throwSupabaseError("insert", error)
+    return
+  }
+
+  const db = await readLocalDb()
   db.applications.unshift(record)
-  await writeDb(db)
+  await writeLocalDb(db)
+}
+
+async function createApplication(fields, files) {
+  const id = `app_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`
+  const storedFiles = await storeFiles(id, files)
+  const record = buildRecord(fields, storedFiles)
+  record.id = id
+
+  await insertRecord(record)
+
+  return publicRecord(record)
+}
+
+async function createApplicationFromStoredFiles(fields, storedFiles) {
+  const record = buildRecord(fields, storedFiles.map(normalizeStoredFile))
+
+  await insertRecord(record)
 
   return publicRecord(record)
 }
 
 async function listApplications() {
-  const db = await readDb()
+  requireProductionStorage()
+
+  if (hasSupabase()) {
+    const { data, error } = await getSupabaseClient()
+      .from(APPLICATIONS_TABLE)
+      .select("*")
+      .order("created_at", { ascending: false })
+
+    throwSupabaseError("list", error)
+
+    return (data || []).map(rowToRecord).map(publicSummary)
+  }
+
+  const db = await readLocalDb()
 
   return db.applications.map(publicSummary)
 }
 
 async function getApplication(id) {
-  const db = await readDb()
+  requireProductionStorage()
+
+  if (hasSupabase()) {
+    const { data, error } = await getSupabaseClient()
+      .from(APPLICATIONS_TABLE)
+      .select("*")
+      .eq("id", id)
+      .maybeSingle()
+
+    throwSupabaseError("detail lookup", error)
+
+    if (!data) {
+      return null
+    }
+
+    return publicRecord(rowToRecord(data))
+  }
+
+  const db = await readLocalDb()
   const record = db.applications.find((application) => application.id === id)
 
   if (!record) {
@@ -209,17 +429,41 @@ async function getApplication(id) {
 }
 
 async function getApplicationFile(applicationId, fileId) {
-  const db = await readDb()
-  const record = db.applications.find((application) => application.id === applicationId)
+  requireProductionStorage()
+
+  let record
+
+  if (hasSupabase()) {
+    const { data, error } = await getSupabaseClient()
+      .from(APPLICATIONS_TABLE)
+      .select("*")
+      .eq("id", applicationId)
+      .maybeSingle()
+
+    throwSupabaseError("file lookup", error)
+    record = data ? rowToRecord(data) : null
+  } else {
+    const db = await readLocalDb()
+    record = db.applications.find((application) => application.id === applicationId)
+  }
 
   if (!record) {
     return null
   }
 
-  const file = record.files.find((storedFile) => storedFile.id === fileId)
+  const files = Array.isArray(record.files) ? record.files : []
+  const file = files.find((storedFile) => storedFile.id === fileId)
 
   if (!file) {
     return null
+  }
+
+  if (file.storageProvider === "vercel-blob") {
+    return {
+      application: publicSummary(record),
+      file,
+      storageProvider: "vercel-blob",
+    }
   }
 
   const absolutePath = path.resolve(STORAGE_ROOT, file.relativePath)
@@ -232,13 +476,16 @@ async function getApplicationFile(applicationId, fileId) {
     application: publicSummary(record),
     file,
     absolutePath,
+    storageProvider: "local-filesystem",
   }
 }
 
 module.exports = {
   createApplication,
+  createApplicationFromStoredFiles,
   getApplication,
   getApplicationFile,
+  getStorageInfo,
   listApplications,
   storageInfo,
 }

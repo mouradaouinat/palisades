@@ -1,8 +1,10 @@
 const formidableModule = require("formidable")
 const fs = require("node:fs")
 const path = require("node:path")
+const { Readable } = require("node:stream")
 const {
   createApplication,
+  createApplicationFromStoredFiles,
   getApplication,
   getApplicationFile,
   listApplications,
@@ -33,7 +35,7 @@ const endpointContract = {
   endpoint: "/api/applications",
   methods: ["GET", "POST", "OPTIONS"],
   storage: {
-    type: "Local JSON database plus local file storage",
+    type: "Supabase database with Vercel Blob files in production; local JSON/filesystem in development",
     envOverride: "APPLICATION_STORAGE_DIR",
     ...storageInfo(),
   },
@@ -80,6 +82,29 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload))
 }
 
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = ""
+
+    req.on("data", (chunk) => {
+      body += chunk
+    })
+    req.on("end", () => {
+      if (!body) {
+        resolve({})
+        return
+      }
+
+      try {
+        resolve(JSON.parse(body))
+      } catch (error) {
+        reject(error)
+      }
+    })
+    req.on("error", reject)
+  })
+}
+
 function requestUrl(req) {
   return new URL(req.url || "/", `http://${req.headers.host || "localhost"}`)
 }
@@ -107,6 +132,25 @@ function validateDateOfBirth(dateOfBirth) {
 
 function validateSSN(ssn) {
   return /^\d{3}-?\d{2}-?\d{4}$/.test(ssn)
+}
+
+function validateApplicationFields(fields) {
+  const missingFields = REQUIRED_FIELDS.filter((field) => !String(firstValue(fields[field]) || "").trim())
+  const invalidFields = []
+  const dateOfBirth = String(firstValue(fields.dateOfBirth) || "")
+  const ssn = String(firstValue(fields.ssn) || "")
+
+  if (dateOfBirth && !validateDateOfBirth(dateOfBirth)) {
+    invalidFields.push("dateOfBirth")
+  }
+  if (ssn && !validateSSN(ssn)) {
+    invalidFields.push("ssn")
+  }
+
+  return {
+    invalidFields,
+    missingFields,
+  }
 }
 
 function fileList(files, name) {
@@ -142,6 +186,31 @@ function isAcceptedFile(part) {
   return ACCEPTED_MIME_TYPES.has(part.mimetype) || ACCEPTED_EXTENSIONS.has(extension)
 }
 
+function isAcceptedStoredFile(file) {
+  const mimetype = file.mimetype || file.contentType
+  const extension = extensionFor(file.originalFilename || file.pathname || file.url)
+
+  return ACCEPTED_MIME_TYPES.has(mimetype) || ACCEPTED_EXTENSIONS.has(extension)
+}
+
+function validateStoredBankStatements(files) {
+  const invalidFiles = []
+
+  files.forEach((file) => {
+    if (!file.url && !file.pathname) {
+      invalidFiles.push(`${file.originalFilename || "Unknown file"} is missing Blob metadata`)
+    }
+    if (!isAcceptedStoredFile(file)) {
+      invalidFiles.push(`${file.originalFilename || "Unknown file"} is not an accepted file type`)
+    }
+    if (Number(file.size || 0) > MAX_FILE_SIZE) {
+      invalidFiles.push(`${file.originalFilename || "Unknown file"} is too large`)
+    }
+  })
+
+  return invalidFiles
+}
+
 async function parseMultipartRequest(req) {
   const form = formidable({
     allowEmptyFiles: false,
@@ -159,6 +228,61 @@ async function parseMultipartRequest(req) {
 
 async function handlePost(req, res) {
   const contentType = req.headers["content-type"] || ""
+
+  if (contentType.includes("application/json")) {
+    let body
+
+    try {
+      body = await readJsonBody(req)
+    } catch {
+      sendJson(res, 400, {
+        ok: false,
+        message: "Invalid JSON body",
+      })
+      return
+    }
+
+    const fields = body.application || body
+    const bankStatements = Array.isArray(body.bankStatements) ? body.bankStatements : []
+    const { invalidFields, missingFields } = validateApplicationFields(fields)
+    const invalidFiles = validateStoredBankStatements(bankStatements)
+
+    if (missingFields.length > 0 || invalidFields.length > 0 || invalidFiles.length > 0 || bankStatements.length !== MAX_BANK_STATEMENTS) {
+      sendJson(res, 400, {
+        ok: false,
+        message: "Application payload is incomplete",
+        errors: {
+          invalidFields,
+          invalidFiles,
+          missingFields,
+          bankStatements:
+            bankStatements.length === MAX_BANK_STATEMENTS
+              ? undefined
+              : `Expected ${MAX_BANK_STATEMENTS} bank statement files and received ${bankStatements.length}`,
+        },
+        contract: endpointContract,
+      })
+      return
+    }
+
+    try {
+      const application = await createApplicationFromStoredFiles(fields, bankStatements)
+
+      sendJson(res, 200, {
+        ok: true,
+        applicationId: application.id,
+        message: "Application received and stored",
+        application,
+        nextEndpointWork: ["Trigger underwriting or CRM ingestion with the applicationId"],
+      })
+    } catch (error) {
+      sendJson(res, 500, {
+        ok: false,
+        message: error instanceof Error ? error.message : "Unable to store application",
+      })
+    }
+    return
+  }
 
   if (!contentType.includes("multipart/form-data")) {
     sendJson(res, 415, {
@@ -183,18 +307,8 @@ async function handlePost(req, res) {
     return
   }
 
-  const missingFields = REQUIRED_FIELDS.filter((field) => !String(firstValue(fields[field]) || "").trim())
-  const invalidFields = []
-  const dateOfBirth = String(firstValue(fields.dateOfBirth) || "")
-  const ssn = String(firstValue(fields.ssn) || "")
+  const { invalidFields, missingFields } = validateApplicationFields(fields)
   const bankStatements = fileList(files, "bankStatements")
-
-  if (dateOfBirth && !validateDateOfBirth(dateOfBirth)) {
-    invalidFields.push("dateOfBirth")
-  }
-  if (ssn && !validateSSN(ssn)) {
-    invalidFields.push("ssn")
-  }
 
   if (missingFields.length > 0 || invalidFields.length > 0 || bankStatements.length !== MAX_BANK_STATEMENTS) {
     await cleanupUploadedFiles(files)
@@ -214,19 +328,23 @@ async function handlePost(req, res) {
     return
   }
 
-  const application = await createApplication(fields, bankStatements)
+  try {
+    const application = await createApplication(fields, bankStatements)
 
-  sendJson(res, 200, {
-    ok: true,
-    applicationId: application.id,
-    message: "Application received and stored",
-    application,
-    nextEndpointWork: [
-      "Swap local file storage for private object storage",
-      "Swap the JSON database for Postgres, MySQL, or another production database",
-      "Trigger underwriting or CRM ingestion with the applicationId",
-    ],
-  })
+    sendJson(res, 200, {
+      ok: true,
+      applicationId: application.id,
+      message: "Application received and stored",
+      application,
+      nextEndpointWork: ["Trigger underwriting or CRM ingestion with the applicationId"],
+    })
+  } catch (error) {
+    await cleanupUploadedFiles(files)
+    sendJson(res, 500, {
+      ok: false,
+      message: error instanceof Error ? error.message : "Unable to store application",
+    })
+  }
 }
 
 async function handleGet(req, res) {
@@ -245,7 +363,40 @@ async function handleGet(req, res) {
   if (applicationId && fileId) {
     const fileResult = await getApplicationFile(applicationId, fileId)
 
-    if (!fileResult || !fs.existsSync(fileResult.absolutePath)) {
+    if (!fileResult) {
+      sendJson(res, 404, {
+        ok: false,
+        message: "File not found",
+      })
+      return
+    }
+
+    if (fileResult.storageProvider === "vercel-blob") {
+      const { get } = require("@vercel/blob")
+      const blobResult = await get(fileResult.file.url || fileResult.file.pathname, {
+        access: "private",
+      })
+
+      if (!blobResult || blobResult.statusCode !== 200 || !blobResult.stream) {
+        sendJson(res, 404, {
+          ok: false,
+          message: "File not found",
+        })
+        return
+      }
+
+      res.statusCode = 200
+      res.setHeader("Content-Type", blobResult.blob.contentType || fileResult.file.mimetype)
+      res.setHeader("Content-Length", blobResult.blob.size || fileResult.file.size)
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${path.basename(fileResult.file.originalFilename).replace(/"/g, "")}"`,
+      )
+      Readable.fromWeb(blobResult.stream).pipe(res)
+      return
+    }
+
+    if (!fs.existsSync(fileResult.absolutePath)) {
       sendJson(res, 404, {
         ok: false,
         message: "File not found",
