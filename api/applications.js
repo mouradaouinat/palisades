@@ -1,4 +1,14 @@
 const formidableModule = require("formidable")
+const fs = require("node:fs")
+const path = require("node:path")
+const {
+  createApplication,
+  getApplication,
+  getApplicationFile,
+  listApplications,
+  storageInfo,
+} = require("./lib/application-store")
+const { isBackofficeAuthenticated, sendUnauthorized } = require("./lib/backoffice-auth")
 
 const formidable = formidableModule.formidable || formidableModule.default
 
@@ -11,6 +21,16 @@ const REQUIRED_FIELDS = ["legalName", "ein", "address", "email", "phone", "isoNa
 const endpointContract = {
   endpoint: "/api/applications",
   methods: ["GET", "POST", "OPTIONS"],
+  storage: {
+    type: "Local JSON database plus local file storage",
+    envOverride: "APPLICATION_STORAGE_DIR",
+    ...storageInfo(),
+  },
+  readEndpoints: {
+    list: "GET /api/applications?view=list",
+    detail: "GET /api/applications?id=<applicationId>",
+    file: "GET /api/applications?applicationId=<applicationId>&fileId=<fileId>",
+  },
   contentType: "multipart/form-data",
   fields: {
     application: "JSON string copy of the full contact form payload",
@@ -47,6 +67,10 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload))
 }
 
+function requestUrl(req) {
+  return new URL(req.url || "/", `http://${req.headers.host || "localhost"}`)
+}
+
 function firstValue(value) {
   return Array.isArray(value) ? value[0] : value
 }
@@ -76,16 +100,6 @@ function isAcceptedFile(part) {
   const extension = extensionFor(part.originalFilename)
 
   return ACCEPTED_MIME_TYPES.has(part.mimetype) || ACCEPTED_EXTENSIONS.has(extension)
-}
-
-function publicFileData(file) {
-  return {
-    field: "bankStatements",
-    originalFilename: file.originalFilename,
-    mimetype: file.mimetype,
-    size: file.size,
-    storedFilename: file.newFilename,
-  }
 }
 
 async function parseMultipartRequest(req) {
@@ -148,27 +162,90 @@ async function handlePost(req, res) {
     return
   }
 
-  const applicationId = `mock_app_${Date.now()}`
+  const application = await createApplication(fields, bankStatements)
 
   sendJson(res, 200, {
     ok: true,
-    applicationId,
-    message: "Mock application received",
-    receivedAt: new Date().toISOString(),
-    applicant: {
-      legalName: firstValue(fields.legalName),
-      dba: firstValue(fields.dba) || "",
-      email: firstValue(fields.email),
-      phone: firstValue(fields.phone),
-      isoName: firstValue(fields.isoName),
-      title: firstValue(fields.title),
-    },
-    files: bankStatements.map(publicFileData),
+    applicationId: application.id,
+    message: "Application received and stored",
+    application,
     nextEndpointWork: [
-      "Persist file streams to private object storage",
-      "Store application metadata with the returned storage keys",
+      "Swap local file storage for private object storage",
+      "Swap the JSON database for Postgres, MySQL, or another production database",
       "Trigger underwriting or CRM ingestion with the applicationId",
     ],
+  })
+}
+
+async function handleGet(req, res) {
+  const url = requestUrl(req)
+  const view = url.searchParams.get("view")
+  const id = url.searchParams.get("id")
+  const applicationId = url.searchParams.get("applicationId")
+  const fileId = url.searchParams.get("fileId")
+  const isBackofficeRead = view === "list" || Boolean(id) || Boolean(applicationId && fileId)
+
+  if (isBackofficeRead && !isBackofficeAuthenticated(req)) {
+    sendUnauthorized(res)
+    return
+  }
+
+  if (applicationId && fileId) {
+    const fileResult = await getApplicationFile(applicationId, fileId)
+
+    if (!fileResult || !fs.existsSync(fileResult.absolutePath)) {
+      sendJson(res, 404, {
+        ok: false,
+        message: "File not found",
+      })
+      return
+    }
+
+    res.statusCode = 200
+    res.setHeader("Content-Type", fileResult.file.mimetype)
+    res.setHeader("Content-Length", fileResult.file.size)
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${path.basename(fileResult.file.originalFilename).replace(/"/g, "")}"`,
+    )
+    fs.createReadStream(fileResult.absolutePath).pipe(res)
+    return
+  }
+
+  if (id) {
+    const application = await getApplication(id)
+
+    if (!application) {
+      sendJson(res, 404, {
+        ok: false,
+        message: "Application not found",
+      })
+      return
+    }
+
+    sendJson(res, 200, {
+      ok: true,
+      application,
+    })
+    return
+  }
+
+  if (view === "list") {
+    const applications = await listApplications()
+
+    sendJson(res, 200, {
+      ok: true,
+      applications,
+      count: applications.length,
+      storage: storageInfo(),
+    })
+    return
+  }
+
+  sendJson(res, 200, {
+    ok: true,
+    message: "Application upload and backoffice endpoint",
+    contract: endpointContract,
   })
 }
 
@@ -182,11 +259,7 @@ module.exports = async function handler(req, res) {
   }
 
   if (req.method === "GET") {
-    sendJson(res, 200, {
-      ok: true,
-      message: "Mock application upload endpoint",
-      contract: endpointContract,
-    })
+    await handleGet(req, res)
     return
   }
 

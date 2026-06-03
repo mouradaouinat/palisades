@@ -7,12 +7,14 @@ import tailwindcss from '@tailwindcss/vite'
 
 const require = createRequire(import.meta.url);
 const applicationsApi = require("./api/applications.js");
+const backofficeAuthApi = require("./api/backoffice-auth.js");
 
 function mockApplicationsApi() {
   return {
     name: "mock-applications-api",
     configureServer(server) {
       server.middlewares.use("/api/applications", applicationsApi);
+      server.middlewares.use("/api/backoffice-auth", backofficeAuthApi);
     },
   };
 }
