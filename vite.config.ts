@@ -6,15 +6,46 @@ import svgr from "vite-plugin-svgr";
 import tailwindcss from '@tailwindcss/vite'
 
 const require = createRequire(import.meta.url);
-const applicationsApi = require("./api/applications.js");
-const backofficeAuthApi = require("./api/backoffice-auth.js");
+
+function loadApiHandler(modulePath) {
+  const apiModules = [
+    modulePath,
+    "./api/lib/application-store.js",
+    "./api/lib/backoffice-auth.js",
+  ];
+
+  apiModules.forEach((apiModule) => {
+    const resolvedPath = require.resolve(apiModule);
+    delete require.cache[resolvedPath];
+  });
+
+  return require(modulePath);
+}
+
+function apiMiddleware(modulePath) {
+  return async (req, res) => {
+    try {
+      const handler = loadApiHandler(modulePath);
+      await handler(req, res);
+    } catch (error) {
+      res.statusCode = 500;
+      res.setHeader("Content-Type", "application/json");
+      res.end(
+        JSON.stringify({
+          ok: false,
+          message: error instanceof Error ? error.message : "API handler failed",
+        }),
+      );
+    }
+  };
+}
 
 function mockApplicationsApi() {
   return {
     name: "mock-applications-api",
     configureServer(server) {
-      server.middlewares.use("/api/applications", applicationsApi);
-      server.middlewares.use("/api/backoffice-auth", backofficeAuthApi);
+      server.middlewares.use("/api/applications", apiMiddleware("./api/applications.js"));
+      server.middlewares.use("/api/backoffice-auth", apiMiddleware("./api/backoffice-auth.js"));
     },
   };
 }
