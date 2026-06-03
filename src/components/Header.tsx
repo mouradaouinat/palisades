@@ -8,22 +8,22 @@ export function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-20">
           {/* Logo */}
-          <div className="flex items-center">
+          <Link to="/" className="flex items-center">
             <Logo />
             <div className="uppercase -ml-18">PALISADES ADVANCE</div>
-          </div>
+          </Link>
 
           {/* Navigation */}
           <nav className="hidden md:flex space-x-8">
             <a
-              href="#services"
+              href="/#services"
               className="text-white/80 hover:text-white transition-all duration-300 hover:scale-105 relative group"
             >
               Solutions
               <div className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-400 to-purple-500 group-hover:w-full transition-all duration-300"></div>
             </a>
             <a
-              href="#about"
+              href="/#about"
               className="text-white/80 hover:text-white transition-all duration-300 hover:scale-105 relative group"
             >
               Technology
