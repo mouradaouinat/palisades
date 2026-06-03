@@ -16,7 +16,18 @@ const MAX_BANK_STATEMENTS = 3
 const MAX_FILE_SIZE = 10 * 1024 * 1024
 const ACCEPTED_MIME_TYPES = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"])
 const ACCEPTED_EXTENSIONS = new Set([".pdf", ".jpg", ".jpeg", ".png", ".webp"])
-const REQUIRED_FIELDS = ["legalName", "ein", "address", "email", "phone", "isoName", "title", "signature"]
+const REQUIRED_FIELDS = [
+  "legalName",
+  "ein",
+  "address",
+  "email",
+  "phone",
+  "isoName",
+  "title",
+  "dateOfBirth",
+  "ssn",
+  "signature",
+]
 
 const endpointContract = {
   endpoint: "/api/applications",
@@ -42,6 +53,8 @@ const endpointContract = {
     phone: "Required contact phone",
     isoName: "Required authorized signer name",
     title: "Required authorized signer title",
+    dateOfBirth: "Required authorized signer date of birth, YYYY-MM-DD",
+    ssn: "Required authorized signer Social Security number",
     signature: "Required typed signature",
     consentNonMarketing: "Boolean string",
     consentMarketing: "Boolean string",
@@ -75,6 +88,27 @@ function firstValue(value) {
   return Array.isArray(value) ? value[0] : value
 }
 
+function validateDateOfBirth(dateOfBirth) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
+    return false
+  }
+
+  const [year, month, day] = dateOfBirth.split("-").map(Number)
+  const parsedDate = new Date(`${dateOfBirth}T00:00:00`)
+
+  return (
+    !Number.isNaN(parsedDate.getTime()) &&
+    parsedDate.getFullYear() === year &&
+    parsedDate.getMonth() === month - 1 &&
+    parsedDate.getDate() === day &&
+    parsedDate <= new Date()
+  )
+}
+
+function validateSSN(ssn) {
+  return /^\d{3}-?\d{2}-?\d{4}$/.test(ssn)
+}
+
 function fileList(files, name) {
   const value = files[name]
 
@@ -83,6 +117,12 @@ function fileList(files, name) {
   }
 
   return Array.isArray(value) ? value : [value]
+}
+
+async function cleanupUploadedFiles(files) {
+  const allFiles = Object.values(files).flat()
+
+  await Promise.all(allFiles.map((file) => fs.promises.rm(file.filepath, { force: true })))
 }
 
 function extensionFor(filename) {
@@ -144,14 +184,26 @@ async function handlePost(req, res) {
   }
 
   const missingFields = REQUIRED_FIELDS.filter((field) => !String(firstValue(fields[field]) || "").trim())
+  const invalidFields = []
+  const dateOfBirth = String(firstValue(fields.dateOfBirth) || "")
+  const ssn = String(firstValue(fields.ssn) || "")
   const bankStatements = fileList(files, "bankStatements")
 
-  if (missingFields.length > 0 || bankStatements.length !== MAX_BANK_STATEMENTS) {
+  if (dateOfBirth && !validateDateOfBirth(dateOfBirth)) {
+    invalidFields.push("dateOfBirth")
+  }
+  if (ssn && !validateSSN(ssn)) {
+    invalidFields.push("ssn")
+  }
+
+  if (missingFields.length > 0 || invalidFields.length > 0 || bankStatements.length !== MAX_BANK_STATEMENTS) {
+    await cleanupUploadedFiles(files)
     sendJson(res, 400, {
       ok: false,
       message: "Application payload is incomplete",
       errors: {
         missingFields,
+        invalidFields,
         bankStatements:
           bankStatements.length === MAX_BANK_STATEMENTS
             ? undefined

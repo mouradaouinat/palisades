@@ -69,6 +69,8 @@ function normalizeFields(fields) {
     phone: String(firstValue(fields.phone) || ""),
     isoName: String(firstValue(fields.isoName) || ""),
     title: String(firstValue(fields.title) || ""),
+    dateOfBirth: String(firstValue(fields.dateOfBirth) || ""),
+    ssn: String(firstValue(fields.ssn) || ""),
     signature: String(firstValue(fields.signature) || ""),
     consentNonMarketing: firstValue(fields.consentNonMarketing) === "true",
     consentMarketing: firstValue(fields.consentMarketing) === "true",

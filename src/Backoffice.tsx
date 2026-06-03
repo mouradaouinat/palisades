@@ -39,6 +39,8 @@ interface ApplicationDetail extends ApplicationSummary {
     phone: string
     isoName: string
     title: string
+    dateOfBirth?: string
+    ssn?: string
     signature: string
     consentNonMarketing: boolean
     consentMarketing: boolean
@@ -60,11 +62,23 @@ const formatFileSize = (bytes: number) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function FieldValue({ label, value }: { label: string; value: string | boolean }) {
+const maskSSN = (ssn?: string) => {
+  const digits = String(ssn || "").replace(/\D/g, "")
+
+  if (digits.length < 4) {
+    return "Not provided"
+  }
+
+  return `***-**-${digits.slice(-4)}`
+}
+
+function FieldValue({ label, value }: { label: string; value?: string | boolean }) {
   return (
     <div className="min-w-0">
       <dt className="text-xs uppercase text-muted-foreground">{label}</dt>
-      <dd className="mt-1 break-words text-sm font-medium text-foreground">{String(value)}</dd>
+      <dd className="mt-1 break-words text-sm font-medium text-foreground">
+        {value === undefined || value === "" ? "Not provided" : String(value)}
+      </dd>
     </div>
   )
 }
@@ -439,6 +453,8 @@ export default function Backoffice() {
                   <dl className="grid grid-cols-1 gap-4 md:grid-cols-3">
                     <FieldValue label="Name" value={selectedApplication.form.isoName} />
                     <FieldValue label="Title" value={selectedApplication.form.title} />
+                    <FieldValue label="Date of Birth" value={selectedApplication.form.dateOfBirth} />
+                    <FieldValue label="SSN" value={maskSSN(selectedApplication.form.ssn)} />
                     <FieldValue label="Signature" value={selectedApplication.form.signature} />
                   </dl>
                 </section>

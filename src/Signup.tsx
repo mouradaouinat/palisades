@@ -21,6 +21,8 @@ const initialFormData = {
   // ISO Information
   isoName: "",
   title: "",
+  dateOfBirth: "",
+  ssn: "",
   signature: "",
   consentNonMarketing: false,
   consentMarketing: false,
@@ -39,6 +41,28 @@ const validateEIN = (ein: string): boolean => {
 const validatePhone = (phone: string): boolean => {
   const phoneRegex = /^[\d\s\-$$$$]+$/
   return phoneRegex.test(phone) && phone.replace(/\D/g, "").length >= 10
+}
+
+const validateDateOfBirth = (dateOfBirth: string): boolean => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
+    return false
+  }
+
+  const [year, month, day] = dateOfBirth.split("-").map(Number)
+  const parsedDate = new Date(`${dateOfBirth}T00:00:00`)
+  const today = new Date()
+
+  return (
+    !Number.isNaN(parsedDate.getTime()) &&
+    parsedDate.getFullYear() === year &&
+    parsedDate.getMonth() === month - 1 &&
+    parsedDate.getDate() === day &&
+    parsedDate <= today
+  )
+}
+
+const validateSSN = (ssn: string): boolean => {
+  return /^\d{3}-?\d{2}-?\d{4}$/.test(ssn.trim())
 }
 
 export function Signup() {
@@ -97,6 +121,16 @@ export function Signup() {
     }
     if (!formData.title.trim()) {
       newErrors.title = "Title is required"
+    }
+    if (!formData.dateOfBirth.trim()) {
+      newErrors.dateOfBirth = "Date of birth is required"
+    } else if (!validateDateOfBirth(formData.dateOfBirth)) {
+      newErrors.dateOfBirth = "Please enter a valid date of birth"
+    }
+    if (!formData.ssn.trim()) {
+      newErrors.ssn = "SSN is required"
+    } else if (!validateSSN(formData.ssn)) {
+      newErrors.ssn = "SSN must be 9 digits or format XXX-XX-XXXX"
     }
     if (!formData.signature.trim()) {
       newErrors.signature = "Signature is required"
@@ -279,6 +313,25 @@ export function Signup() {
                     onChange={handleChange}
                     required
                     error={errors.title}
+                  />
+                  <FormInput
+                    label="Date of Birth"
+                    name="dateOfBirth"
+                    type="date"
+                    value={formData.dateOfBirth}
+                    onChange={handleChange}
+                    required
+                    error={errors.dateOfBirth}
+                  />
+                  <FormInput
+                    label="Social Security Number (SSN)"
+                    name="ssn"
+                    type="password"
+                    placeholder="XXX-XX-XXXX"
+                    value={formData.ssn}
+                    onChange={handleChange}
+                    required
+                    error={errors.ssn}
                   />
                 </div>
                 <FormInput
