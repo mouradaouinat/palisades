@@ -16,7 +16,13 @@ function supabaseUrl() {
 }
 
 function supabaseServiceRoleKey() {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || ""
+  return (
+    process.env.PALISADES_SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SECRET_KEY ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    ""
+  )
 }
 
 function legacyJwtRole(key) {
@@ -39,10 +45,14 @@ function isPublishableSupabaseKey(key) {
   return Boolean(key && (/^sb_publishable_/i.test(key) || key === publishableKey || legacyJwtRole(key) === "anon"))
 }
 
+function isSupabaseServerKey(key) {
+  return Boolean(key && (/^sb_secret_/i.test(key) || legacyJwtRole(key) === "service_role"))
+}
+
 function hasSupabase() {
   const key = supabaseServiceRoleKey()
 
-  return Boolean(supabaseUrl() && key && !isPublishableSupabaseKey(key))
+  return Boolean(supabaseUrl() && isSupabaseServerKey(key))
 }
 
 function hasBlob() {
@@ -62,8 +72,17 @@ function getStorageInfo() {
       table: APPLICATIONS_TABLE,
     },
     env: {
-      database: "SUPABASE_URL or VITE_SUPABASE_URL, plus SUPABASE_SERVICE_ROLE_KEY",
+      database:
+        "SUPABASE_URL or VITE_SUPABASE_URL, plus PALISADES_SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY",
       blob: "BLOB_READ_WRITE_TOKEN",
+      present: {
+        blobReadWriteToken: hasBlob(),
+        supabaseServerKey: Boolean(supabaseServiceRoleKey()),
+        supabaseUrl: Boolean(supabaseUrl()),
+      },
+      valid: {
+        supabaseServerKey: isSupabaseServerKey(supabaseServiceRoleKey()),
+      },
     },
   }
 }
@@ -80,7 +99,11 @@ function requireProductionStorage() {
       throw new Error("Supabase is not configured. SUPABASE_SERVICE_ROLE_KEY must be a secret/service_role key, not a publishable or anon key.")
     }
 
-    throw new Error("Supabase is not configured. Set SUPABASE_URL or VITE_SUPABASE_URL, plus SUPABASE_SERVICE_ROLE_KEY in Vercel.")
+    if (supabaseServiceRoleKey() && !isSupabaseServerKey(supabaseServiceRoleKey())) {
+      throw new Error("Supabase is not configured. The Supabase server key must start with sb_secret_ or be the legacy service_role JWT.")
+    }
+
+    throw new Error("Supabase is not configured. Set SUPABASE_URL or VITE_SUPABASE_URL, plus PALISADES_SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY in Vercel.")
   }
 
   if (!hasBlob()) {

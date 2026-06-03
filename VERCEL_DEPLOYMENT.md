@@ -54,12 +54,26 @@ SUPABASE_APPLICATIONS_TABLE=applications
 
 Do not prefix the service role key with `VITE_`; it must stay server-only.
 
-The publishable key is safe to expose, but it is not enough for the protected application API because this app stores DOB, SSN, and bank statement metadata. The server API needs `SUPABASE_SERVICE_ROLE_KEY` so it can write and read the `applications` table without exposing that access to the browser.
+The publishable key is safe to expose, but it is not enough for the protected application API because this app stores DOB, SSN, and bank statement metadata. The server API needs `PALISADES_SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_SERVICE_ROLE_KEY` so it can write and read the `applications` table without exposing that access to the browser.
+
+Use either:
+
+```bash
+PALISADES_SUPABASE_SERVICE_ROLE_KEY=...
+```
+
+or:
+
+```bash
+SUPABASE_SERVICE_ROLE_KEY=...
+```
+
+The value must be a Supabase `sb_secret_...` key or the legacy `service_role` JWT. It cannot be the `sb_publishable_...` key.
 
 ## Runtime Behavior
 
 - If `BLOB_READ_WRITE_TOKEN` exists, the browser uploads statements directly to Vercel Blob through `/api/blob-upload`.
-- If `VITE_SUPABASE_URL` or `SUPABASE_URL` exists, and `SUPABASE_SERVICE_ROLE_KEY` exists, application records are stored in Supabase.
+- If `VITE_SUPABASE_URL` or `SUPABASE_URL` exists, and `PALISADES_SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_SERVICE_ROLE_KEY` exists, application records are stored in Supabase.
 - If either is missing on Vercel, the API returns a clear configuration error instead of silently writing to temporary storage.
 - Local development still uses `storage/applications.json` and `storage/uploads`.
 
